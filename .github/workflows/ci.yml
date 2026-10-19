@@ -30,30 +30,31 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      github.event_name == 'pull_request' ||
-      (github.event_name == 'push' && github.ref == 'refs/heads/master')
+    # 建议用 ${{ }} 包裹长表达式，避免插件报错
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/master') }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4 # 注意：目前官方最新稳定版是 v4，v7 会报错找不到
         with:
           fetch-depth: 0
           submodules: recursive
 
       - name: Free disk space for build and caches
+        # Cache uploads need space for a temporary archive after the APK build.
         run: |
           df -h /
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup \
+            /opt/hostedtoolcache/CodeQL /usr/local/share/boost
           sudo apt-get clean
+          df -h /
 
       - name: Set up JDK 21
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v4 # 注意：官方最新稳定版是 v4，请勿用 v5
         with:
           distribution: temurin
           java-version: 21
           # Keep a single owner for Gradle dependency and wrapper caches.
           cache: gradle
-
       - name: Grant execute permission
         run: chmod +x gradlew
 
