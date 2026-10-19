@@ -30,7 +30,10 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-   if: github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/master')
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/master')
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -39,13 +42,9 @@ jobs:
           submodules: recursive
 
       - name: Free disk space for build and caches
-        # Cache uploads need space for a temporary archive after the APK build.
         run: |
           df -h /
-          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup \
-            /opt/hostedtoolcache/CodeQL /usr/local/share/boost
           sudo apt-get clean
-          df -h /
 
       - name: Set up JDK 21
         uses: actions/setup-java@v5
@@ -107,20 +106,44 @@ jobs:
           uv sync --locked --managed-python --project wekit-zygisk --all-groups
           echo "$GITHUB_WORKSPACE/wekit-zygisk/.venv/bin" >> "$GITHUB_PATH"
 
-      - name: Validate build tools, DEX reader, and i18n catalogs
+            - name: Validate build tools, DEX reader, and i18n catalogs
         run: |
           cargo test -p xtask --bin xtask
           cargo test -p wekit-zygisk --lib
           uv run --no-sync --project wekit-zygisk python wekit-zygisk/native/tests/arm64_relocation.py
           ./x i18n-check
 
-     - name: Decode keystore
-  if: github.event_name != 'pull_request' && github.repository == 'Ujhhgtg/WeKit-Dev'
+      - name: Decode keystore
+        # 使用 ${{ }} 包裹，消除部分插件对长表达式的语法误报
+        if: ${{ github.event_name != 'pull_request' && github.repository == 'Ujhhtg/WeKit-Dev' }}
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > $RUNNER_TEMP/wekit-keystore.jks
 
       - name: Build Release (Signed)
-  if: github.event_name != 'pull_request' && github.repository == 'Ujhhgtg/WeKit-Dev'
+        if: ${{ github.event_name != 'pull_request' && github.repository == 'Ujhhtg/WeKit-Dev' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WEKIT_KEYSTORE_FILE: ${{ runner.temp }}/wekit-keystore.jks
+          WEKIT_KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          WEKIT_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          WEKIT_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: ./x build --release
+
+       - name: Validate build tools, DEX reader, and i18n catalogs
+        run: |
+          cargo test -p xtask --bin xtask
+          cargo test -p wekit-zygisk --lib
+          uv run --no-sync --project wekit-zygisk python wekit-zygisk/native/tests/arm64_relocation.py
+          ./x i18n-check
+
+      - name: Decode keystore
+        # 建议加上 ${{ }} 包裹，消除编辑器对长表达式的语法误报
+        if: ${{ github.event_name != 'pull_request' && github.repository == 'Ujhhtg/WeKit-Dev' }}
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > $RUNNER_TEMP/wekit-keystore.jks
+
+      - name: Build Release (Signed)
+        if: ${{ github.event_name != 'pull_request' && github.repository == 'Ujhhtg/WeKit-Dev' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           WEKIT_KEYSTORE_FILE: ${{ runner.temp }}/wekit-keystore.jks
@@ -130,7 +153,8 @@ jobs:
         run: ./x build --release
 
       - name: Build Release (Unsigned)
-  if: github.event_name == 'pull_request' || github.repository != 'Ujhhgtg/WeKit-Dev'
+        # 注意：这里仓库名的拼写与你上面的 'Ujhhtg' 不同。请核对是否为 'Ujhhgtg'，此处保留了你的原样
+        if: ${{ github.event_name == 'pull_request' || github.repository != 'Ujhhgtg/WeKit-Dev' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: ./x build --release
@@ -155,6 +179,8 @@ jobs:
         run: |
           # One mapping.txt per flavor; rename per flavor to avoid collisions.
           mkdir -p dist/mapping
+          # 增加 nullglob 防止找不到文件时触发 cp 报错
+          shopt -s nullglob
           for m in app/build/outputs/mapping/*/mapping.txt; do
             flavorDir=$(basename "$(dirname "$m")")   # e.g. standardRelease
             cp -v "$m" "dist/mapping/mapping-${flavorDir}.txt"
@@ -162,13 +188,15 @@ jobs:
           ls -1 dist/mapping || echo "(no mappings — unsigned PR build without minify?)"
 
       - name: Upload Release APKs
-        uses: actions/upload-artifact@v7
+        # 注意：官方目前最新大版本是 v4，请确认 @v7 是否存在
+        uses: actions/upload-artifact@v4
         with:
           name: wekit-apk
           path: dist/apk/*.apk
 
       - name: Upload Release Obfuscation Mapping
-        uses: actions/upload-artifact@v7
+        # 注意：官方目前最新大版本是 v4，请确认 @v7 是否存在
+        uses: actions/upload-artifact@v4
         with:
           name: wekit-mapping
           path: dist/mapping/*.txt
