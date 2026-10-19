@@ -46,11 +46,14 @@ jobs:
             /opt/hostedtoolcache/CodeQL /usr/local/share/boost
           sudo apt-get clean
           df -h /
-          sudo apt-get clean
-          df -h /
 
       - name: Set up JDK 21
-        uses: actions/setup-java@v4 # 注意：官方最新稳定版是 v4，请勿用 v5
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          # Keep a single owner for Gradle dependency and wrapper caches.
+          cache: gradle
         with:
           distribution: temurin
           java-version: 21
